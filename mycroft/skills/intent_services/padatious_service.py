@@ -27,6 +27,76 @@ from mycroft.util.log import LOG
 from .base import IntentMatch
 
 
+class PadatiousMatcher:
+    """Matcher class to avoid redundancy in padatious intent matching."""
+    def __init__(self, service):
+        self.service = service
+        self.has_result = False
+        self.ret = None
+        self.conf = None
+
+    def _match_level(self, utterances, limit):
+        """Match intent and make sure a certain level of confidence is reached.
+
+        Args:
+            utterances (list of tuples): Utterances to parse, originals paired
+                                         with optional normalized version.
+            limit (float): required confidence level.
+        """
+        if not self.has_result:
+            padatious_intent = None
+            LOG.debug('Padatious Matching confidence > {}'.format(limit))
+            for utt in utterances:
+                for variant in utt:
+                    intent = self.service.calc_intent(variant)
+                    if intent:
+                        best = padatious_intent.conf \
+                            if padatious_intent else 0.0
+                        if best < intent.conf:
+                            padatious_intent = intent
+                            padatious_intent.matches['utterance'] = utt[0]
+
+            if padatious_intent:
+                skill_id = padatious_intent.name.split(':')[0]
+                self.ret = IntentMatch(
+                    'Padatious', padatious_intent.name,
+                    padatious_intent.matches, skill_id
+                )
+                self.conf = padatious_intent.conf
+            self.has_result = True
+
+        if self.conf and self.conf > limit:
+            return self.ret
+        return None
+
+    def match_high(self, utterances, _=None, __=None):
+        """Intent matcher for high confidence.
+
+        Args:
+            utterances (list of tuples): Utterances to parse, originals paired
+                                         with optional normalized version.
+        """
+        return self._match_level(utterances, 0.95)
+
+    def match_medium(self, utterances, _=None, __=None):
+        """Intent matcher for medium confidence.
+
+        Args:
+            utterances (list of tuples): Utterances to parse, originals paired
+                                         with optional normalized version.
+        """
+        return self._match_level(utterances, 0.8)
+
+    def match_low(self, utterances, _=None, __=None):
+        """Intent matcher for low confidence.
+
+        Args:
+            utterances (list of tuples): Utterances to parse, originals paired
+                                         with optional normalized version.
+        """
+        return self._match_level(utterances, 0.5)
+
+
 class PadatiousService:
     """Service class for padatious intent matching."""
     def __init__(self, bus, config):
